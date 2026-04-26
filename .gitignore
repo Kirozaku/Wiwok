@@ -1,0 +1,32 @@
+# scan results — never commit these
+wiwok_results/
+
+# user config
+.wiwok.json
+
+# plugins
+.wiwok_plugins/
+
+# python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# venv
+.env
+.venv
+env/
+venv/
+
+# editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# os
+.DS_Store
+Thumbs.db
