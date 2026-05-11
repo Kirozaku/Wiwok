@@ -27,7 +27,7 @@ OUT_DIR  = os.path.expanduser("~/wiwok_results")
 PLUG_DIR = os.path.expanduser("~/.wiwok_plugins")
 
 DEFAULTS = {
-    "workers": 6,
+    "workers": 4,
     "timeout": 30,
     "retries": 2,
     "retry_delay": 1.5
@@ -46,7 +46,6 @@ def load_config():
 
 CFG = load_config()
 
-# terminal width + color codes
 W = 68
 
 _R    = "\033[0m"
@@ -104,9 +103,8 @@ def banner():
     hr()
 
 
-# keeps requests to the same domain spaced out
 class RateLimiter:
-    def __init__(self, delay=0.35):
+    def __init__(self, delay=0.5):
         self._last = {}
         self._lock = threading.Lock()
         self.delay = delay
@@ -122,7 +120,6 @@ _RL = RateLimiter()
 
 
 class Cache:
-    """in-memory request cache, thread-safe"""
     def __init__(self):
         self.store = {}
         self._lock = threading.Lock()
@@ -168,8 +165,6 @@ def http_get(url, headers=None, timeout=15):
         return None
 
 
-# ---- native lookup functions ----
-
 def _mod_github_profile(target):
     raw = http_get("https://api.github.com/users/" + urllib.parse.quote(target))
     if not raw:
@@ -190,7 +185,6 @@ def _mod_github_profile(target):
 
 
 def _mod_github_emails(target):
-    # grab emails from public commit history
     url = f"https://api.github.com/users/{urllib.parse.quote(target)}/events/public?per_page=20"
     raw = http_get(url)
     if not raw:
@@ -409,7 +403,6 @@ def _mod_wayback_check(target):
     elif target.startswith("+"):
         checks = [target.replace("+", ""), target.replace("+62", "0")]
     else:
-        # check a few common platforms
         checks = [
             f"instagram.com/{target}",
             f"twitter.com/{target}",
@@ -427,6 +420,8 @@ def _mod_wayback_check(target):
             continue
         try:
             rows = json.loads(raw)
+            if not rows or len(rows) < 2:
+                continue
             for row in rows[1:4]:
                 ts, orig = row[0], row[1]
                 d = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
@@ -549,7 +544,7 @@ def _mod_youtube_check(target):
     if '"error"' in raw and '"code": 404' in raw:
         return "  not found"
 
-    name = re.search(r'"channelMetadataRenderer"\s*:\s*\{"title"\s*:\s*"([^"]+)"', raw)
+    name = re.search(r'"channelMetadataRenderer"\s*:\s*\{[^}]*"title"\s*:\s*"([^"]+)"', raw)
     subs = re.search(r'"subscriberCountText"[^}]*?"simpleText"\s*:\s*"([^"]+)"', raw)
     vids = re.search(r'"videosCountText"[^}]*?"runs"[^]]*?"text"\s*:\s*"([^"]+)"', raw)
 
@@ -559,7 +554,7 @@ def _mod_youtube_check(target):
     out = [
         "  [+] channel found on YouTube",
         f"  url         : https://www.youtube.com/@{target}",
-        f"  name        : {name.group(1)}",
+        f"  name        : {name.group(1) if name else target}",
     ]
     if subs: out.append(f"  subscribers : {subs.group(1)}")
     if vids: out.append(f"  videos      : {vids.group(1)}")
@@ -574,7 +569,7 @@ def _mod_twitch_check(target):
     if not raw:
         return "  not found or blocked"
 
-    if '"isLiveBroadcast"' in raw or ('"@' + target + '"').lower() in raw.lower():
+    if '"isLiveBroadcast"' in raw or ('"' + target + '"').lower() in raw.lower():
         live = re.search(r'"isLiveBroadcast"\s*:\s*(true|false)', raw)
         out = [
             "  [+] channel found on Twitch",
@@ -645,7 +640,6 @@ def _mod_phone_format(target):
     return "\n".join(lines)
 
 
-# maps module name → function
 _NATIVE = {
     "github_profile":    _mod_github_profile,
     "github_emails":     _mod_github_emails,
@@ -792,7 +786,6 @@ MODULES = {
         "check": "#native", "timeout": 5, "install": "#builtin",
     },
 
-    # email modules
     "holehe": {
         "type": "email", "weight": 0,
         "desc": "holehe quick scan (use holehe_full instead)",
@@ -848,18 +841,11 @@ MODULES = {
         "install": "pip install maigret --user --break-system-packages",
     },
 
-    # phone modules
     "ignorant": {
         "type": "phone", "weight": 10,
         "desc": "check phone number on WhatsApp, Instagram, Snapchat",
         "check": "ignorant",
-        "cmd": (
-            "python3 -c \""
-            "import phonenumbers,os;"
-            "n=phonenumbers.parse('{s}',None);"
-            "os.system('ignorant '+str(n.country_code)+' '+str(n.national_number))"
-            "\""
-        ),
+        "cmd": "ignorant {s}",
         "timeout": 60,
         "install": "pip install ignorant --break-system-packages",
     },
@@ -913,7 +899,6 @@ MODULES = {
         "check": "#native", "timeout": 5, "install": "#builtin",
     },
 
-    # works for all target types
     "wayback_check": {
         "type": "any", "weight": 6,
         "desc": "search target snapshots in Wayback Machine",
@@ -1016,14 +1001,8 @@ def build_cmd(name, target):
     tpl = MODULES[name].get("cmd", "")
     if not tpl:
         return ""
-    # regular command vs python one-liner need different quoting
-    if "{s}" in tpl and "python3 -c" not in tpl:
-        return tpl.replace("{s}", shlex.quote(target))
-    safe = target.replace("{", "{{").replace("}", "}}")
-    try:
-        return tpl.format(s=safe)
-    except Exception:
-        return f"{name} {target}"
+    safe = target.replace("'", "'\\''")
+    return tpl.replace("{s}", "'" + safe + "'") if "python3 -c" not in tpl else tpl.replace("{s}", safe)
 
 
 _PAT_EMAIL    = re.compile(r"^[\w.+\-]+@[\w.\-]+\.[a-zA-Z]{2,}$")
@@ -1045,7 +1024,6 @@ def sanitize(s):
         raise ValueError("target is empty")
     if len(s) > 200:
         raise ValueError("target is too long")
-    # block characters that could be used for command injection
     bad = re.search(r'[;&|`$\n\r<>()\[\]{}\\\'\"#^~*!]', s)
     if bad:
         raise ValueError("invalid characters in target")
@@ -1081,19 +1059,12 @@ def _run_once(name, target):
             encoding="utf-8",
             errors="replace",
             env=dict(os.environ, PYTHONIOENCODING="utf-8"),
-            start_new_session=True,
         )
         try:
             stdout, _ = proc.communicate(timeout=timeout)
             return stdout or "", cmd, proc.returncode == 0
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                time.sleep(0.4)
-                if proc.poll() is None:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except Exception:
-                proc.kill()
+            proc.kill()
             stdout, _ = proc.communicate()
             return f"  timed out after {timeout}s\n{stdout or ''}", cmd, False
     except Exception as e:
@@ -1113,7 +1084,7 @@ def run_module(name, target):
         if "not installed" in out or "native function not found" in out:
             break
         if attempt < retries:
-            time.sleep(delay * (2 ** attempt))
+            time.sleep(delay)
 
     return last
 
@@ -1145,7 +1116,6 @@ class Progress:
 
 _ANSI = re.compile(r"\033[\[\(][\?]?[0-9;]*[a-zA-Z]|\033[a-zA-Z]|\r")
 
-# lines we want to drop from tool output
 _NOISE_PATTERNS = [
     r"\d+%\|", r"\s*\[[-]\]\s", r"Update available", r"github\.com/sherlock-project",
     r"You can run search", r"Too many errors", r"You can see detailed",
@@ -1284,7 +1254,7 @@ def investigate(target, ttype="", mode="standard", only=None, quiet=False):
             "pivots": {k: sorted(v) for k, v in pivots.items()},
         }
 
-    nw = min(CFG.get("workers", 6), len(pool)) if pool else 1
+    nw = min(CFG.get("workers", 4), len(pool)) if pool else 1
     with ThreadPoolExecutor(max_workers=nw) as ex:
         futs = {ex.submit(worker, n): n for n in pool}
         for f in as_completed(futs):
@@ -1591,14 +1561,7 @@ def cmd_setup():
     banner()
     p()
     hr()
-    p(f"  {c(_B, '1/3  apt packages')}")
-    hr()
-    _inst("apt update",  "sudo apt-get update -qq", 120)
-    _inst("curl",        "sudo apt-get install -y curl", 120)
-    _inst("sherlock",    "sudo apt install -y sherlock", 120)
-    p()
-    hr()
-    p(f"  {c(_B, '2/3  pip tools')}")
+    p(f"  {c(_B, '1/2  pip tools')}")
     hr()
     pip_tools = [
         ("phonenumbers", "pip install phonenumbers --break-system-packages", 60),
@@ -1607,8 +1570,7 @@ def cmd_setup():
         ("socialscan",   "pip install socialscan --break-system-packages", 180),
         ("ignorant",     "pip install ignorant --break-system-packages", 180),
         ("phoneinfoga",
-         "curl -sSL https://raw.githubusercontent.com/sundowndev/phoneinfoga/master"
-         "/support/scripts/install | bash"
+         "curl -sSL https://raw.githubusercontent.com/sundowndev/phoneinfoga/master/support/scripts/install | bash"
          " && sudo mv ./phoneinfoga /usr/bin/phoneinfoga 2>/dev/null || true",
          120),
     ]
@@ -1616,10 +1578,9 @@ def cmd_setup():
         _inst(lbl, cmd, t)
     p()
     hr()
-    p(f"  {c(_B, '3/3  verify')}")
+    p(f"  {c(_B, '2/2  verify')}")
     hr()
     tools = {
-        "sherlock":    "sherlock",
         "holehe":      "holehe",
         "maigret":     "maigret",
         "socialscan":  "socialscan",
@@ -1651,7 +1612,6 @@ def cmd_update():
         ("socialscan",   "pip install --upgrade socialscan --break-system-packages", 180),
         ("ignorant",     "pip install --upgrade ignorant --break-system-packages", 180),
         ("phonenumbers", "pip install --upgrade phonenumbers --break-system-packages", 60),
-        ("sherlock",     "sudo apt install -y --only-upgrade sherlock", 120),
     ]
     for lbl, cmd, t in updates:
         _inst(lbl, cmd, t)
@@ -1797,7 +1757,6 @@ def cmd_pivot(inv, mode, quiet):
 def _print_summary(inv, mode="standard"):
     s = inv["summary"]
 
-    # skip lines that are not real findings
     _fake = re.compile(
         r"(Email used)|(Using sites database)|(Search completed)"
         r"|(Short text report)|(Phone number used)|(Phone number not used)|(Rate limit)"
@@ -1858,7 +1817,6 @@ def main():
 
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
-    # add local bin to PATH if not already there
     for d in (os.path.expanduser("~/.local/bin"), "/usr/local/bin"):
         if os.path.isdir(d) and d not in os.environ.get("PATH", ""):
             os.environ["PATH"] = d + ":" + os.environ["PATH"]
@@ -1909,7 +1867,7 @@ def main():
             kv("type",    ttype)
             kv("mode",    args.mode)
             kv("time",    datetime.now().strftime("%Y-%m-%d  %H:%M:%S"))
-            kv("workers", str(CFG.get("workers", 6)))
+            kv("workers", str(CFG.get("workers", 4)))
             if only:
                 kv("modules", ", ".join(only))
             hr()
