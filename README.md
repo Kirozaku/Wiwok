@@ -15,11 +15,11 @@
 
 ![Python](https://img.shields.io/badge/Python-3.x-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Kali_Linux-red?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)
 ![API Key](https://img.shields.io/badge/API_Key-Not_Required-brightgreen?style=flat-square)
-![Version](https://img.shields.io/badge/Version-5.0-orange?style=flat-square)
+![Version](https://img.shields.io/badge/Version-6.0.0--db2-orange?style=flat-square)
 
-OSINT tool for investigating **usernames**, **emails**, and **phone numbers** — no API keys, no login, no extra setup.
+OSINT tool for investigating **usernames**, **emails**, **phone numbers**, and **full names** — no API keys, no login, no extra setup.
 
 ---
 
@@ -27,11 +27,14 @@ OSINT tool for investigating **usernames**, **emails**, and **phone numbers** �
 
 - **Zero API Key** — install and run, nothing to configure
 - **Multi-target** — username, email, phone, full name
-- **Auto Pivot** — findings are automatically chained into new targets
-- **Parallel Scan** — all modules run concurrently
-- **3 Scan Modes** — `quick`, `standard`, `deep`
+- **Smart OSINT Mode** — automatic multi-layer pivoting with confidence scoring and unified profile builder
+- **Auto Pivot** — findings are automatically chained into new investigation targets
+- **Parallel Scan** — all modules run concurrently via thread pool
+- **4 Scan Modes** — `quick`, `standard`, `deep`, `smos`
 - **Triple Output** — JSON, TXT, and interactive HTML report
-- **20+ Native Modules** — built-in checks with no external dependencies
+- **68 Native Modules** — built-in checks covering social, academic, developer, and public record sources
+- **Confidence Scoring** — findings tagged `HIGH`, `MEDIUM`, or `LOW` based on source reliability
+- **False Positive Filtering** — CDN URLs, API endpoints, and signed tokens are automatically suppressed
 - **Plugin System** — add custom modules via `.json` files
 - **Kali Linux Ready**
 
@@ -76,74 +79,150 @@ python3 wiwok.py -m deep johndoe
 # deep scan + auto pivot
 python3 wiwok.py -m deep -P johndoe
 
+# smart OSINT mode (multi-layer auto pivot)
+python3 wiwok.py -m smos johndoe
+
+# smart OSINT with custom depth and target limit
+python3 wiwok.py -m smos --depth 3 --max-targets 20 johndoe
+
 # run specific modules only
 python3 wiwok.py -r sherlock,maigret johndoe
+
+# quiet mode (no live output, results saved to file)
+python3 wiwok.py -q johndoe
 ```
 
 ### Options
 
 ```
--t <type>     force target type [username|email|phone|name]
--m <mode>     scan depth [quick|standard|deep]
--r <modules>  comma-separated module list
--P            auto-investigate all discovered pivots
--q            quiet mode (no live output)
---no-color    disable colors
---setup       install all dependencies
---update      update all tools
---check       check module status
+-t <type>          force target type [username|email|phone|name]
+-m <mode>          scan depth [quick|standard|deep|smos]
+-r <modules>       comma-separated module list
+-P                 auto-investigate all discovered pivots
+-q                 quiet mode (no live output)
+--depth <n>        pivot depth for smos mode (default: 2, max: 4)
+--max-targets <n>  total target cap for smos mode (default: 12)
+--no-color         disable colors
+--setup            install all dependencies
+--update           update all tools
+--check            check module status
 ```
+
+---
+
+## Scan Modes
+
+| Mode | Description |
+|------|-------------|
+| `quick` | High-weight modules only — fastest, less coverage |
+| `standard` | Core modules — default balance of speed and coverage |
+| `deep` | All modules including external tools |
+| `smos` | Smart OSINT — automatic multi-layer pivot with unified profile and confidence scoring |
+
+### Smart OSINT (`-m smos`)
+
+smos investigates the seed target, extracts pivots (emails, usernames, names discovered in results), and automatically re-investigates each pivot — up to a configurable depth. All findings are deduplicated across targets and merged into a single **Unified Profile** with confidence levels:
+
+- `[H]` **HIGH** — structured API data (GitHub, ORCID, HIBP, etc.)
+- `[M]` **MEDIUM** — validated HTML scrape (Instagram, TikTok, Mastodon, etc.)
+- `[L]` **LOW** — inferred from external tools (Sherlock, Maigret)
 
 ---
 
 ## Modules
 
-### Username (20)
+### Username (40)
+
 | Module | Description |
 |--------|-------------|
-| sherlock | 300+ social platforms |
-| maigret | 2000+ sites, extracts profile info |
-| socialscan | availability check on major platforms |
+| sherlock | Track username across 300+ social platforms |
+| maigret | Deep profile from 2000+ sites |
+| socialscan | Availability check on major platforms |
+| whatsmyname | Content-validated check on 17 platforms |
 | instagram_check | Instagram native check |
 | facebook_check | Facebook native check |
-| youtube_check | YouTube channel check |
 | tiktok_check | TikTok native check |
 | snapchat_check | Snapchat native check |
+| youtube_check | YouTube channel check |
 | twitch_check | Twitch channel check |
 | steam_check | Steam profile check |
 | pinterest_check | Pinterest native check |
-| github_profile | GitHub profile + repos |
-| github_emails | Emails from commit history |
-| keybase | Identity proofs |
-| reddit_profile | Reddit public stats |
-| linkedin_dorks | LinkedIn-specific search dorks |
-| username_variants | Common username variations |
-| wayback_check | Wayback Machine snapshots |
-| pastebin_search | Public pastebin dumps |
-| google_dorks | Ready-to-use Google dorks |
+| telegram_check | Telegram user / channel / bot (multi-layer anti-FP) |
+| github_profile | GitHub profile, repos, and followers |
+| github_emails | Emails extracted from public commit history |
+| gitlab_profile | GitLab public profile and projects |
+| codeberg_profile | Codeberg (Gitea) public profile |
+| keybase | Identity proofs on Keybase |
+| reddit_profile | Public Reddit profile and statistics |
+| bluesky_profile | Bluesky / AT Protocol profile |
+| mastodon_search | Mastodon account lookup across key instances |
+| hackernews_profile | HackerNews — karma, about, submission count |
+| stackexchange_profile | StackOverflow / StackExchange profile lookup |
+| lobsters_profile | Lobsters tech community — trust chain & GitHub link |
+| npm_profile | NPM packages & email extraction |
+| pypi_profile | PyPI package — author, email, homepage |
+| cratesio_profile | Crates.io Rust developer profile |
+| rubygems_profile | RubyGems owned gems & GitHub links |
+| dockerhub_profile | Docker Hub — join date, company, location |
+| devto_profile | Dev.to profile — Twitter/GitHub links, location |
+| hashnode_profile | Hashnode developer blog profile |
+| chesscom_profile | Chess.com — real name, country, Twitch |
+| lichess_profile | Lichess — bio, links, location |
+| discogs_profile | Discogs music collector — real name, location |
+| myanimelist_profile | MyAnimeList via Jikan — gender, birthday, location |
+| anilist_profile | AniList profile via GraphQL |
+| pinboard_profile | Pinboard public bookmarks — interests & patterns |
+| unavatar | Profile image URLs for reverse-image search |
+| linkedin_dorks | LinkedIn-specific Google dorks |
+| username_variants | Generate common username variations |
 
-### Email (8)
+### Email (9)
+
 | Module | Description |
 |--------|-------------|
-| holehe_full | 121 platform check |
+| holehe_full | Registered check on 121 platforms |
+| emailrep | Email reputation, breach status & social presence |
+| hibp | Have I Been Pwned — breach & paste check |
+| xposedornot | Breach check via XposedOrNot |
 | gravatar | Gravatar profile from email hash |
-| github_by_email | GitHub accounts linked to email |
+| github_by_email | GitHub accounts linked to this email |
 | email_sherlock | Sherlock from email local-part |
 | email_maigret | Maigret from email local-part |
-| wayback_check | Wayback Machine search |
-| pastebin_search | Pastebin dump search |
-| google_dorks | Google dorks for email |
+| wayback_check | Wayback Machine snapshots |
 
-### Phone (7)
+### Phone (4)
+
 | Module | Description |
 |--------|-------------|
 | ignorant | WhatsApp, Instagram, Snapchat check |
-| phoneinfoga | Carrier, location, online profile |
+| phoneinfoga | Carrier, location, and online profile |
 | phone_meta | Carrier, timezone, number type |
-| phone_format | Auto-format number variants |
-| wayback_check | Wayback Machine search |
-| pastebin_search | Pastebin dump search |
-| google_dorks | Google dorks for phone |
+| phone_format | Auto-format number variants (E.164, local, etc.) |
+
+### Full Name (11)
+
+| Module | Description |
+|--------|-------------|
+| orcid_search | ORCID researcher ID — structured author query |
+| openalex_search | OpenAlex author — works, citations, h-index, institution |
+| semanticscholar_search | Semantic Scholar — papers, citations, affiliations |
+| crossref_search | CrossRef — publications with author-validated filtering |
+| openlibrary_search | Open Library — book author profile, works, birth date |
+| opencorporates_search | Corporate officer records in 180+ countries |
+| opensanctions_search | Sanctions, PEP, Interpol/OFAC watchlists |
+| fec_search | US political donation records (address, employer) |
+| wikidata_search | Wikidata — birth, positions, external IDs |
+| gdelt_news | GDELT — global news coverage in 100+ languages |
+| name_dorks | Targeted Google dorks for full name |
+
+### Universal (4 — run on all target types)
+
+| Module | Description |
+|--------|-------------|
+| wayback_check | Wayback Machine snapshots |
+| pastebin_search | Public pastebin dump search |
+| google_dorks | Ready-to-use Google dorks |
+| duckduckgo_search | DuckDuckGo instant answer |
 
 ---
 
@@ -155,7 +234,8 @@ Results are saved automatically to `~/wiwok_results/`:
 ~/wiwok_results/
 ├── target_20240101_120000.json
 ├── target_20240101_120000.txt
-└── target_20240101_120000.html
+├── target_20240101_120000.html
+└── target_smos_20240101_120000.json   ← Smart OSINT unified profile
 ```
 
 The HTML report is interactive — each module result is collapsible.
@@ -179,6 +259,10 @@ Drop a `.json` file into `~/.wiwok_plugins/` to add custom modules without touch
   }
 }
 ```
+
+Supported `type` values: `username`, `email`, `phone`, `name`, `any`
+
+Weight range: `0` (disabled) to `10` (always run in quick mode)
 
 ---
 
@@ -217,4 +301,8 @@ This tool is intended for educational purposes and legitimate security research 
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+Copyright (C) 2026 Kirozaku
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for details.
