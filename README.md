@@ -291,6 +291,8 @@ If this tool helped you, consider donating:
 
 **BTC**: `1N1rMC95mwYqpQNCWC5TQmZJGdpwf2APsS`
 
+**Trakteer** (QRIS / GoPay / OVO / Dana / Bank Transfer): [trakteer.id/Kirozaku/tip](https://trakteer.id/Kirozaku/tip)
+
 ---
 
 ## Disclaimer
