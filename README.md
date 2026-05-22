@@ -297,6 +297,8 @@ If this tool helped you, consider donating:
 
 This tool is intended for educational purposes and legitimate security research only. The author is not responsible for any misuse. Make sure you have proper authorization before investigating any individual or organization.
 
+Some parts written with the help of AI tools.
+
 ---
 
 ## License
